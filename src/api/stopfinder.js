@@ -8,14 +8,32 @@
  * @property {number} lon Longitude (WGS84).
  */
 
-/**
- * Ready-to-render row for `systemMessages` from StopFinder rapidJSON (BROKER notices).
- * @typedef {Object} EfaSystemMessageRow
- * @property {'error' | 'info' | 'neutral'} severity Maps `type:error` vs informational broker codes.
- * @property {string} label Short German summary for UI.
- */
-
 const EFA_VERSION = '10.4.18.18'
+
+/**
+ * Detects BROKER -8011 (address outside the regional association / no binding resolution).
+ * @param {Record<string, unknown>} data Raw JSON body from `outputFormat=rapidJSON`.
+ * @returns {boolean}
+ */
+function brokerIndicatesOutOfVerbund(data) {
+  const msgs = Array.isArray(data.systemMessages) ? data.systemMessages : []
+  for (const raw of msgs) {
+    if (!raw || typeof raw !== 'object') continue
+    const o = /** @type {Record<string, unknown>} */ (raw)
+    const msgType = typeof o.type === 'string' ? o.type : ''
+    const code =
+      typeof o.code === 'number'
+        ? o.code
+        : typeof o.code === 'string'
+          ? Number(o.code)
+          : NaN
+    const mod = typeof o.module === 'string' ? o.module : ''
+    if (msgType !== 'error' || code !== -8011) continue
+    if (mod && mod !== 'BROKER') continue
+    return true
+  }
+  return false
+}
 
 /**
  * Builds the StopFinder GET path and query for the regional EFA instance (served via same-origin Vite proxy).
@@ -78,11 +96,11 @@ export function buildStopFinderCoordUrl(lat, lon) {
  * Fetches nearby transit stops for a geographic point (`type_sf=coord`).
  * @param {number} lat Latitude WGS84.
  * @param {number} lon Longitude WGS84.
- * @returns {Promise<{ resolvedLabel: string, stops: NearbyStop[], systemMessages: EfaSystemMessageRow[] }>}
+ * @returns {Promise<{ resolvedLabel: string, stops: NearbyStop[], outOfVerbund: boolean }>}
  */
 export async function fetchNearbyStopsByCoord(lat, lon) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return { resolvedLabel: '', stops: [], systemMessages: [] }
+    return { resolvedLabel: '', stops: [], outOfVerbund: false }
   }
 
   const res = await fetch(buildStopFinderCoordUrl(lat, lon))
@@ -98,12 +116,12 @@ export async function fetchNearbyStopsByCoord(lat, lon) {
 /**
  * Fetches nearby transit stops for a resolved address using the proxied StopFinder endpoint.
  * @param {string} address User-entered address or place string.
- * @returns {Promise<{ resolvedLabel: string, stops: NearbyStop[], systemMessages: EfaSystemMessageRow[] }>}
+ * @returns {Promise<{ resolvedLabel: string, stops: NearbyStop[], outOfVerbund: boolean }>}
  */
 export async function fetchNearbyStops(address) {
   const query = address.trim()
   if (!query) {
-    return { resolvedLabel: '', stops: [], systemMessages: [] }
+    return { resolvedLabel: '', stops: [], outOfVerbund: false }
   }
 
   const res = await fetch(buildStopFinderUrl(query))
@@ -119,10 +137,10 @@ export async function fetchNearbyStops(address) {
 /**
  * Normalizes rapidJSON StopFinder payload into nearby stops and a resolved location label.
  * @param {Record<string, unknown>} data Raw JSON body from `outputFormat=rapidJSON`.
- * @returns {{ resolvedLabel: string, stops: NearbyStop[], systemMessages: EfaSystemMessageRow[] }}
+ * @returns {{ resolvedLabel: string, stops: NearbyStop[], outOfVerbund: boolean }}
  */
 export function parseStopFinderResponse(data) {
-  const systemMessages = extractSystemRows(data)
+  const outOfVerbund = brokerIndicatesOutOfVerbund(data)
   const locations = Array.isArray(data.locations) ? data.locations : []
 
   const bestWithStops =
@@ -152,7 +170,7 @@ export function parseStopFinderResponse(data) {
     return {
       resolvedLabel: label,
       stops: normalizeStopList(/** @type {unknown[]} */ (bestWithStops.assignedStops)),
-      systemMessages,
+      outOfVerbund,
     }
   }
 
@@ -172,60 +190,8 @@ export function parseStopFinderResponse(data) {
   return {
     resolvedLabel,
     stops: normalizeStopList(directStops),
-    systemMessages,
+    outOfVerbund,
   }
-}
-
-/**
- * Maps `systemMessages` broker entries into UI rows with severity and German label.
- * @param {Record<string, unknown>} data Raw JSON body.
- * @returns {EfaSystemMessageRow[]}
- */
-function extractSystemRows(data) {
-  const msgs = Array.isArray(data.systemMessages) ? data.systemMessages : []
-  /** @type {EfaSystemMessageRow[]} */
-  const rows = []
-  for (const m of msgs) {
-    if (!m || typeof m !== 'object') continue
-    const o = /** @type {Record<string, unknown>} */ (m)
-    const msgType = typeof o.type === 'string' ? o.type : 'message'
-    const code =
-      typeof o.code === 'number'
-        ? o.code
-        : typeof o.code === 'string'
-          ? Number(o.code)
-          : undefined
-    const rawText = typeof o.text === 'string' ? o.text.trim() : ''
-
-    let severity = /** @type {'error' | 'info' | 'neutral'} */ ('neutral')
-    if (msgType === 'error') severity = 'error'
-    else if (code === -8010 && msgType === 'message') severity = 'info'
-
-    const label = formatBrokerLabel(code, msgType, rawText)
-    if (label) rows.push({ severity, label })
-  }
-  return rows
-}
-
-/**
- * Builds one German helper line per broker message (empty API text handled for known codes).
- * @param {number | undefined} code Broker code (e.g. -8010, -8011).
- * @param {string} msgType Original `systemMessages[].type`.
- * @param {string} rawText Trimmed `text` field from JSON.
- * @returns {string}
- */
-function formatBrokerLabel(code, msgType, rawText) {
-  if (rawText) return rawText
-  if (code === -8011 && msgType === 'error') {
-    return 'BROKER -8011: Keine verbindliche Zuordnung (leerer Text). Häufig bei Abfragen außerhalb des Verbunds oder bei Mehrdeutigkeit — die angezeigten Namenstreffer können irreführend sein.'
-  }
-  if (code === -8010) {
-    return 'BROKER -8010: Eingabe vom Server als eindeutig erkannt.'
-  }
-  if (code !== undefined && Number.isFinite(code)) {
-    return `BROKER ${code}`
-  }
-  return ''
 }
 
 /**
