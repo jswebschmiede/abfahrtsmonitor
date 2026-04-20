@@ -9,7 +9,7 @@ import { generateWestfalenTripDeepLink } from './utils/westfalenDeepLink.js'
  * The test location dropdown (teal) is always rendered.
  * @type {boolean}
  */
-const DEBUG_SHOW_API_URLS = false
+const DEBUG_SHOW_API_URLS = true
 
 const debugUrlsPanelHtml = DEBUG_SHOW_API_URLS
     ? `
@@ -290,21 +290,21 @@ function createHaltestelleIcon() {
 }
 
 /**
- * Builds a Google Maps directions URL (optional origin = user address, destination = stop).
- * @param {import('./api/stopfinder.js').NearbyStop} stop Normalized stop.
- * @param {string} [originText=''] - Start address as entered in the search field.
+ * Builds a Google Maps directions URL using text only (same idea as `name_sf` + stop display name).
+ * @param {import('./api/stopfinder.js').NearbyStop} stop Normalized stop; `name` matches EFA `assignedStops[].name`.
+ * @param {string} [originText=''] - Start address (same string as StopFinder `name_sf`, e.g. user search query).
  * @returns {string | null} URL or null if no usable destination.
  */
 function buildGoogleMapsDirectionsUrl(stop, originText = '') {
-    const name = typeof stop.name === 'string' ? stop.name.trim() : ''
+    const destName = typeof stop.name === 'string' ? stop.name.trim() : ''
     const origin = typeof originText === 'string' ? originText.trim() : ''
     const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : ''
 
+    if (destName) {
+        return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destName)}${originParam}`
+    }
     if (Number.isFinite(stop.lat) && Number.isFinite(stop.lon)) {
         return `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lon}${originParam}`
-    }
-    if (name) {
-        return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(name)}${originParam}`
     }
     return null
 }
@@ -362,7 +362,7 @@ async function fillServingLineBadges(row, stop) {
 /**
  * Renders stop cards into the list element.
  * @param {import('./api/stopfinder.js').NearbyStop[]} stops Normalized stops.
- * @param {string} [originAddress=''] - Address string from the search input (Google Maps origin).
+ * @param {string} [originAddress=''] - Address string for Google Maps `origin` (same as StopFinder query).
  */
 function renderStops(stops, originAddress = '') {
     if (!stopListEl) return

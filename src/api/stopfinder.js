@@ -8,6 +8,13 @@
  * @property {number} lon Longitude (WGS84).
  */
 
+/**
+ * @typedef {Object} NearbyStopsResult
+ * @property {string} resolvedLabel
+ * @property {NearbyStop[]} stops
+ * @property {boolean} outOfVerbund
+ */
+
 const EFA_VERSION = '10.4.18.18'
 
 /**
@@ -96,7 +103,7 @@ export function buildStopFinderCoordUrl(lat, lon) {
  * Fetches nearby transit stops for a geographic point (`type_sf=coord`).
  * @param {number} lat Latitude WGS84.
  * @param {number} lon Longitude WGS84.
- * @returns {Promise<{ resolvedLabel: string, stops: NearbyStop[], outOfVerbund: boolean }>}
+ * @returns {Promise<NearbyStopsResult>}
  */
 export async function fetchNearbyStopsByCoord(lat, lon) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
@@ -116,7 +123,7 @@ export async function fetchNearbyStopsByCoord(lat, lon) {
 /**
  * Fetches nearby transit stops for a resolved address using the proxied StopFinder endpoint.
  * @param {string} address User-entered address or place string.
- * @returns {Promise<{ resolvedLabel: string, stops: NearbyStop[], outOfVerbund: boolean }>}
+ * @returns {Promise<NearbyStopsResult>}
  */
 export async function fetchNearbyStops(address) {
   const query = address.trim()
@@ -137,7 +144,7 @@ export async function fetchNearbyStops(address) {
 /**
  * Normalizes rapidJSON StopFinder payload into nearby stops and a resolved location label.
  * @param {Record<string, unknown>} data Raw JSON body from `outputFormat=rapidJSON`.
- * @returns {{ resolvedLabel: string, stops: NearbyStop[], outOfVerbund: boolean }}
+ * @returns {NearbyStopsResult}
  */
 export function parseStopFinderResponse(data) {
   const outOfVerbund = brokerIndicatesOutOfVerbund(data)
