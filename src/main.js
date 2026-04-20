@@ -4,18 +4,15 @@ import { buildStopFinderUrl, fetchNearbyStops } from './api/stopfinder.js'
 import { formatMapsClientError, reverseGeocodeLatLng } from './utils/reverseGeocode.js'
 import { generateWestfalenTripDeepLink } from './utils/westfalenDeepLink.js'
 
-const root = document.querySelector('#app')
-if (!root) throw new Error('Missing #app')
+/**
+ * When true, shows the violet debug panel (StopFinder and ServingLines request URLs).
+ * The test location dropdown (teal) is always rendered.
+ * @type {boolean}
+ */
+const DEBUG_SHOW_API_URLS = false
 
-root.innerHTML = `
-  <div class="min-h-dvh bg-slate-950 text-slate-100">
-    <main class="mx-auto max-w-2xl px-4 py-10">
-      <h1 class="text-2xl font-semibold tracking-tight text-white">Haltestellen in der Nähe</h1>
-      <p class="mt-2 text-sm text-slate-400">
-        Adresse — Westfalenfahrplan StopFinder (EFA, rapidJSON).
-      </p>
-
-      <div class="mt-6 space-y-4 p-4 bg-slate-900 rounded-lg">
+const debugUrlsPanelHtml = DEBUG_SHOW_API_URLS
+    ? `
       <h2 class="text-sm font-medium text-violet-300/90">Debug-Info</h2>
         <div class="rounded-lg border border-violet-500/30 bg-violet-950/30 p-3 shadow-sm shadow-violet-950/20">
           <p class="text-xs font-medium text-violet-300/90">Anfrage-URL (gleiche wie beim Suchen, über Vite-Proxy)</p>
@@ -37,6 +34,22 @@ root.innerHTML = `
             rel="noopener noreferrer"
             ><!-- JS --></a>
         </div>
+`
+    : ''
+
+const root = document.querySelector('#app')
+if (!root) throw new Error('Missing #app')
+
+root.innerHTML = `
+  <div class="min-h-dvh bg-slate-950 text-slate-100">
+    <main class="mx-auto max-w-2xl px-4 py-10">
+      <h1 class="text-2xl font-semibold tracking-tight text-white">Haltestellen in der Nähe</h1>
+      <p class="mt-2 text-sm text-slate-400">
+        Adresse — Westfalenfahrplan StopFinder (EFA, rapidJSON).
+      </p>
+
+      <div class="mt-6 space-y-4 p-4 bg-slate-900 rounded-lg">
+        ${debugUrlsPanelHtml}
 
         <div class="rounded-lg border border-teal-500/30 bg-teal-950/25 p-3 shadow-sm shadow-teal-950/20">
           <label for="test-coords" class="mb-1 block text-xs font-medium text-teal-300/90">Teststandort (Koordinaten)</label>
