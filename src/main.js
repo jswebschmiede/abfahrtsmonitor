@@ -9,7 +9,7 @@ import { generateWestfalenTripDeepLink } from './utils/westfalenDeepLink.js'
  * The test location dropdown (teal) is always rendered.
  * @type {boolean}
  */
-const DEBUG_SHOW_API_URLS = true
+const DEBUG_SHOW_API_URLS = false
 
 const debugUrlsPanelHtml = DEBUG_SHOW_API_URLS
     ? `
