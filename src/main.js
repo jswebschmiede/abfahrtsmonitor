@@ -1,6 +1,7 @@
 import './style.css'
 import { buildStopFinderUrl, fetchNearbyStops } from './api/stopfinder.js'
 import { formatMapsClientError, reverseGeocodeLatLng } from './utils/reverseGeocode.js'
+import { generateWestfalenTripDeepLink } from './utils/westfalenDeepLink.js'
 
 const root = document.querySelector('#app')
 if (!root) throw new Error('Missing #app')
@@ -196,11 +197,35 @@ function setGeocodeControlsDisabled(disabled) {
     testCoordsSelect.disabled = disabled
 }
 
+const stopLinkClass =
+    'text-sm font-medium underline decoration-slate-500/60 underline-offset-2 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400'
+
+/**
+ * Builds a Google Maps directions URL (optional origin = user address, destination = stop).
+ * @param {import('./api/stopfinder.js').NearbyStop} stop Normalized stop.
+ * @param {string} [originText=''] - Start address as entered in the search field.
+ * @returns {string | null} URL or null if no usable destination.
+ */
+function buildGoogleMapsDirectionsUrl(stop, originText = '') {
+    const name = typeof stop.name === 'string' ? stop.name.trim() : ''
+    const origin = typeof originText === 'string' ? originText.trim() : ''
+    const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : ''
+
+    if (Number.isFinite(stop.lat) && Number.isFinite(stop.lon)) {
+        return `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lon}${originParam}`
+    }
+    if (name) {
+        return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(name)}${originParam}`
+    }
+    return null
+}
+
 /**
  * Renders stop cards into the list element.
  * @param {import('./api/stopfinder.js').NearbyStop[]} stops Normalized stops.
+ * @param {string} [originAddress=''] - Address string from the search input (Google Maps origin).
  */
-function renderStops(stops) {
+function renderStops(stops, originAddress = '') {
     if (!stopListEl) return
     stopListEl.innerHTML = ''
     for (const stop of stops) {
@@ -208,9 +233,10 @@ function renderStops(stops) {
         li.className =
             'rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 shadow-sm shadow-black/20'
 
+        const label = stop.name || '(ohne Namen)'
         const title = document.createElement('p')
         title.className = 'font-medium text-white'
-        title.textContent = stop.name || '(ohne Namen)'
+        title.textContent = label
 
         const meta = document.createElement('p')
         meta.className = 'mt-1 text-sm text-slate-400'
@@ -219,7 +245,34 @@ function renderStops(stops) {
         if (stop.durationMin !== undefined) parts.push(`ca. ${stop.durationMin} Min.`)
         meta.textContent = parts.join(' · ') || '—'
 
+        const actions = document.createElement('div')
+        actions.className = 'mt-3 flex flex-wrap items-center gap-x-5 gap-y-2'
+
+        if (stop.id) {
+            const plan = document.createElement('a')
+            plan.className = `${stopLinkClass} text-violet-300 hover:text-violet-200`
+            plan.href = generateWestfalenTripDeepLink(stop.id, new Date())
+            plan.target = '_blank'
+            plan.rel = 'noopener noreferrer'
+            plan.textContent = 'Fahrplan aufrufen'
+            actions.appendChild(plan)
+        }
+
+        const mapsUrl = buildGoogleMapsDirectionsUrl(stop, originAddress)
+        if (mapsUrl) {
+            const route = document.createElement('a')
+            route.className = `${stopLinkClass} text-teal-300 hover:text-teal-200`
+            route.href = mapsUrl
+            route.target = '_blank'
+            route.rel = 'noopener noreferrer'
+            route.textContent = 'Route planen'
+            actions.appendChild(route)
+        }
+
         li.append(title, meta)
+        if (actions.childNodes.length > 0) {
+            li.appendChild(actions)
+        }
         stopListEl.appendChild(li)
     }
 }
@@ -332,7 +385,7 @@ form.addEventListener('submit', async (e) => {
 
         if (outOfVerbund) {
             resolvedEl.innerHTML = ''
-            renderStops([])
+            renderStops([], q)
             resultSection.classList.add('hidden')
             statusEl.textContent = ''
             return
@@ -344,13 +397,13 @@ form.addEventListener('submit', async (e) => {
 
         if (stops.length === 0) {
             statusEl.textContent = 'Keine Haltestellen gefunden.'
-            renderStops([])
+            renderStops([], q)
             resultSection.classList.remove('hidden')
             return
         }
 
         statusEl.textContent = `${stops.length} Haltestelle${stops.length === 1 ? '' : 'n'} in der Nähe.`
-        renderStops(stops)
+        renderStops(stops, q)
         resultSection.classList.remove('hidden')
     } catch (err) {
         console.error(err)
