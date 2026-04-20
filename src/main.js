@@ -36,6 +36,9 @@ root.innerHTML = `
             target="_blank"
             rel="noopener noreferrer"
             ><!-- JS --></a>
+          <p class="mt-2 text-xs text-slate-500">
+            Badges: nur MVG-Buslinien mit <span class="text-slate-400">OperatorURL</span> https://mvg-aktuell.de (nach der Abfrage gefiltert).
+          </p>
         </div>
 
         <div class="rounded-lg border border-teal-500/30 bg-teal-950/25 p-3 shadow-sm shadow-teal-950/20">
@@ -323,7 +326,7 @@ async function fillServingLineBadges(row, stop) {
         if (badges.length === 0) {
             const empty = document.createElement('span')
             empty.className = 'text-xs text-slate-500'
-            empty.textContent = 'Keine Buslinien'
+            empty.textContent = 'Keine MVG-Linien (mvg-aktuell.de)'
             row.appendChild(empty)
             return
         }

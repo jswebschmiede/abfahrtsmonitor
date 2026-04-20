@@ -6,8 +6,8 @@
 
 const EFA_VERSION = '10.4.18.18'
 
-/** NWL operator filter (trial): same key as AddInfo; may limit ServingLines to this company if the server supports it. */
-const SERVING_LINES_SEL_OPERATOR = 'MVG Märkische Verkehrsgesellschaft GmbH'
+/** MVG “Aktuell” info URL; matched against `properties.OperatorURL` client-side after fetch. */
+const MVG_OPERATOR_URL = 'https://mvg-aktuell.de'
 
 /**
  * MOT-style `product.class` values kept for badges: bus-only (EFA trip table: 5 city bus, 6 regional bus, 7 coach / e.g. Schnellbus).
@@ -17,7 +17,7 @@ const BUS_ONLY_PRODUCT_CLASSES = new Set([5, 6, 7])
 /**
  * Builds ServingLines GET URL for lines at a stop (`mode=odv`, `type_sl=stopID`).
  * Does not request explicit train services (`lsShowTrainsExplicit` omitted).
- * Includes `itdLPxx_selOperator` for operator-scoped trial (NWL).
+ * MVG filtering is applied in {@link parseServingLinesForBadges} (not via HTTP params).
  * @param {string} stopId Global or internal stop ID from StopFinder.
  * @returns {string} Relative URL beginning with `/efa/XML_SERVINGLINES_REQUEST`.
  */
@@ -25,7 +25,6 @@ export function buildServingLinesUrl(stopId) {
   const id = typeof stopId === 'string' ? stopId.trim() : ''
   const params = new URLSearchParams({
     coordOutputFormat: 'WGS84[dd.ddddd]',
-    itdLPxx_selOperator: SERVING_LINES_SEL_OPERATOR,
     language: 'de',
     locationServerActive: '1',
     mode: 'odv',
@@ -38,6 +37,41 @@ export function buildServingLinesUrl(stopId) {
     version: EFA_VERSION,
   })
   return `/efa/XML_SERVINGLINES_REQUEST?${params.toString()}`
+}
+
+/**
+ * Reads operator info URL from a ServingLines row (`properties.OperatorURL` or `properties.operatorURL`).
+ * @param {Record<string, unknown>} line Raw line from ServingLines response.
+ * @returns {string | undefined} URL string if present.
+ */
+function getLineOperatorUrl(line) {
+  const props = line.properties && typeof line.properties === 'object' ? /** @type {Record<string, unknown>} */ (line.properties) : undefined
+  if (!props) return undefined
+  const upper = props.OperatorURL
+  const lower = props.operatorURL
+  const raw = typeof upper === 'string' ? upper : typeof lower === 'string' ? lower : ''
+  const t = raw.trim()
+  return t || undefined
+}
+
+/**
+ * Normalizes an operator URL for equality checks (trim, strip trailing slash).
+ * @param {string} url Raw URL.
+ * @returns {string}
+ */
+function normalizeOperatorUrlForCompare(url) {
+  return url.trim().replace(/\/+$/, '')
+}
+
+/**
+ * Returns true if the line is tagged with the MVG mvg-aktuell.de operator URL.
+ * @param {Record<string, unknown>} line Raw line from ServingLines response.
+ * @returns {boolean}
+ */
+function isMvgAktuellLine(line) {
+  const u = getLineOperatorUrl(line)
+  if (!u) return false
+  return normalizeOperatorUrlForCompare(u) === normalizeOperatorUrlForCompare(MVG_OPERATOR_URL)
 }
 
 /**
@@ -85,7 +119,7 @@ function dedupeByLabel(items) {
 }
 
 /**
- * Normalizes rapidJSON ServingLines payload to badge data (bus lines only).
+ * Normalizes rapidJSON ServingLines payload to badge data: bus lines with `properties.OperatorURL` matching MVG mvg-aktuell.de.
  * @param {Record<string, unknown>} data Raw JSON body from `outputFormat=rapidJSON`.
  * @returns {ServingLineBadge[]}
  */
@@ -98,6 +132,7 @@ export function parseServingLinesForBadges(data) {
     const line = /** @type {Record<string, unknown>} */ (entry)
     const product = line.product && typeof line.product === 'object' ? /** @type {Record<string, unknown>} */ (line.product) : undefined
     if (!isBusLineProduct(product)) continue
+    if (!isMvgAktuellLine(line)) continue
     const label = lineLabel(line)
     if (!label) continue
     const fullName = typeof line.name === 'string' ? line.name.trim() : ''
@@ -111,7 +146,7 @@ export function parseServingLinesForBadges(data) {
 }
 
 /**
- * Fetches bus serving lines for a stop (for UI badges).
+ * Fetches serving lines for a stop and returns MVG (mvg-aktuell.de) bus badges only.
  * @param {string} stopId Stop ID from StopFinder.
  * @returns {Promise<ServingLineBadge[]>}
  */
