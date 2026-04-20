@@ -40,6 +40,62 @@ export function buildStopFinderUrl(address) {
 }
 
 /**
+ * Builds `name_sf` for StopFinder coordinate mode (`lon` before `lat`, bracket syntax per EFA).
+ * @param {number} lat Latitude WGS84.
+ * @param {number} lon Longitude WGS84.
+ * @returns {string}
+ */
+export function formatCoordNameSf(lat, lon) {
+  const latStr = Number(lat).toFixed(5)
+  const lonStr = Number(lon).toFixed(5)
+  return `${lonStr}:${latStr}:WGS84[dd.ddddd]`
+}
+
+/**
+ * Builds StopFinder GET URL using `type_sf=coord` and encoded coordinate in `name_sf`.
+ * @param {number} lat Latitude WGS84 (degrees).
+ * @param {number} lon Longitude WGS84 (degrees).
+ * @returns {string} Relative URL beginning with `/efa/XML_STOPFINDER_REQUEST`.
+ */
+export function buildStopFinderCoordUrl(lat, lon) {
+  const params = new URLSearchParams({
+    coordOutputFormat: 'WGS84[dd.ddddd]',
+    language: 'de',
+    locationInfoActive: '1',
+    locationServerActive: '1',
+    name_sf: formatCoordNameSf(lat, lon),
+    nwlStopFinderMacro: '1',
+    outputFormat: 'rapidJSON',
+    serverInfo: '1',
+    sl3plusStopFinderMacro: '1',
+    type_sf: 'coord',
+    version: EFA_VERSION,
+  })
+  return `/efa/XML_STOPFINDER_REQUEST?${params.toString()}`
+}
+
+/**
+ * Fetches nearby transit stops for a geographic point (`type_sf=coord`).
+ * @param {number} lat Latitude WGS84.
+ * @param {number} lon Longitude WGS84.
+ * @returns {Promise<{ resolvedLabel: string, stops: NearbyStop[], systemMessages: EfaSystemMessageRow[] }>}
+ */
+export async function fetchNearbyStopsByCoord(lat, lon) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return { resolvedLabel: '', stops: [], systemMessages: [] }
+  }
+
+  const res = await fetch(buildStopFinderCoordUrl(lat, lon))
+  if (!res.ok) {
+    throw new Error(`StopFinder request failed (${res.status})`)
+  }
+
+  /** @type {Record<string, unknown>} */
+  const data = await res.json()
+  return parseStopFinderResponse(data)
+}
+
+/**
  * Fetches nearby transit stops for a resolved address using the proxied StopFinder endpoint.
  * @param {string} address User-entered address or place string.
  * @returns {Promise<{ resolvedLabel: string, stops: NearbyStop[], systemMessages: EfaSystemMessageRow[] }>}

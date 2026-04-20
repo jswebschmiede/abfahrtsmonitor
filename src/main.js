@@ -1,5 +1,6 @@
 import './style.css'
 import { buildStopFinderUrl, fetchNearbyStops } from './api/stopfinder.js'
+import { formatMapsClientError, reverseGeocodeLatLng } from './utils/reverseGeocode.js'
 
 const root = document.querySelector('#app')
 if (!root) throw new Error('Missing #app')
@@ -9,23 +10,23 @@ root.innerHTML = `
     <main class="mx-auto max-w-2xl px-4 py-10">
       <h1 class="text-2xl font-semibold tracking-tight text-white">Haltestellen in der Nähe</h1>
       <p class="mt-2 text-sm text-slate-400">
-        Adresse eingeben — Anzeige über den Westfalenfahrplan StopFinder (EFA, rapidJSON).
+        Adresse — Westfalenfahrplan StopFinder (EFA, rapidJSON).
       </p>
 
       <div class="mt-6 rounded-lg border border-slate-800 bg-slate-900/50 p-3">
         <p class="text-xs font-medium text-slate-500">Anfrage-URL (gleiche wie beim Suchen, über Vite-Proxy)</p>
-        <p id="api-url-placeholder" class="mt-2 text-sm text-slate-500">Adresse eintragen, um die URL zu sehen.</p>
+        <p id="api-url-placeholder" class="mt-2 text-sm text-slate-500"><!-- JS --></p>
         <a
           id="api-url-link"
           class="mt-2 hidden break-all text-sm text-violet-400 underline decoration-violet-500/50 underline-offset-2 hover:text-violet-300"
           href="#"
           target="_blank"
           rel="noopener noreferrer"
-          ><!-- filled by JS --></a>
+          ><!-- JS --></a>
       </div>
 
-      <form id="address-form" class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-end" novalidate>
-        <div class="min-w-0 flex-1">
+      <form id="search-form" class="mt-8 space-y-6" novalidate>
+        <div id="block-address" class="space-y-3">
           <label for="address" class="mb-1 block text-sm font-medium text-slate-300">Adresse</label>
           <input
             id="address"
@@ -35,11 +36,24 @@ root.innerHTML = `
             placeholder="z. B. Dortmund, Mergelteichstraße 80"
             class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 placeholder:text-slate-500 outline-none ring-violet-500/0 transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
           />
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+            <button
+              type="button"
+              id="geo-btn"
+              class="inline-flex shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 transition hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Standort vom Gerät
+            </button>
+            <p class="text-xs text-slate-500">
+              Geolocation nur unter https oder localhost. Adresse per Google Geocoding API (Vite-Proxy, Key in .env).
+            </p>
+          </div>
         </div>
+
         <button
           type="submit"
           id="submit-btn"
-          class="inline-flex shrink-0 items-center justify-center rounded-lg bg-violet-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-violet-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex w-full shrink-0 items-center justify-center rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-violet-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           Suchen
         </button>
@@ -63,8 +77,9 @@ root.innerHTML = `
   </div>
 `
 
-const form = /** @type {HTMLFormElement} */ (root.querySelector('#address-form'))
+const form = /** @type {HTMLFormElement} */ (root.querySelector('#search-form'))
 const addressInput = /** @type {HTMLInputElement} */ (root.querySelector('#address'))
+const geoBtn = /** @type {HTMLButtonElement} */ (root.querySelector('#geo-btn'))
 const submitBtn = /** @type {HTMLButtonElement} */ (root.querySelector('#submit-btn'))
 const statusEl = root.querySelector('#status')
 const errorEl = root.querySelector('#error')
@@ -76,20 +91,21 @@ const apiUrlLink = /** @type {HTMLAnchorElement | null} */ (root.querySelector('
 const systemMessagesEl = root.querySelector('#system-messages')
 
 /**
- * Updates the preview link to the proxied StopFinder URL for the current address field value.
+ * Updates the preview link for the StopFinder address query.
  */
 function updateApiUrlPreview() {
-  if (!apiUrlPlaceholder || !apiUrlLink || !addressInput) return
+  if (!apiUrlPlaceholder || !apiUrlLink) return
+  apiUrlLink.classList.add('hidden')
+  apiUrlLink.removeAttribute('href')
+
   const q = addressInput.value.trim()
   if (!q) {
-    apiUrlPlaceholder.classList.remove('hidden')
-    apiUrlLink.classList.add('hidden')
-    apiUrlLink.removeAttribute('href')
+    apiUrlPlaceholder.textContent = 'Adresse eintragen, um die URL zu sehen.'
     return
   }
   const path = buildStopFinderUrl(q)
   const fullUrl = `${window.location.origin}${path}`
-  apiUrlPlaceholder.classList.add('hidden')
+  apiUrlPlaceholder.textContent = ''
   apiUrlLink.classList.remove('hidden')
   apiUrlLink.href = fullUrl
   apiUrlLink.textContent = fullUrl
@@ -122,7 +138,7 @@ function setError(message) {
 
 /**
  * Shows BROKER `systemMessages` from StopFinder below the status line.
- * @param {Array<{ severity: string, label: string }>} rows Parsed rows from `fetchNearbyStops`.
+ * @param {Array<{ severity: string, label: string }>} rows Parsed rows from fetch helpers.
  */
 function renderSystemMessages(rows) {
   if (!systemMessagesEl) return
@@ -182,33 +198,88 @@ function renderStops(stops) {
   }
 }
 
+/**
+ * Maps GeolocationPositionError code to German text.
+ * @param {number} code Error code from the Geolocation API.
+ * @returns {string}
+ */
+function geoErrorMessage(code) {
+  switch (code) {
+    case 1:
+      return 'Standort: Zugriff verweigert. Bitte Berechtigung in den Browser-Einstellungen erlauben.'
+    case 2:
+      return 'Standort: Position nicht verfügbar.'
+    case 3:
+      return 'Standort: Zeitüberschreitung. Bitte erneut versuchen.'
+    default:
+      return 'Standort: Unbekannter Fehler.'
+  }
+}
+
 addressInput.addEventListener('input', updateApiUrlPreview)
 addressInput.addEventListener('change', updateApiUrlPreview)
+
+geoBtn.addEventListener('click', async () => {
+  setError(null)
+  if (!navigator.geolocation) {
+    setError('Geolocation wird von diesem Browser nicht unterstützt.')
+    return
+  }
+  if (!statusEl) return
+
+  geoBtn.disabled = true
+  statusEl.textContent = 'Standort wird ermittelt …'
+
+  try {
+    const pos = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 15_000,
+        maximumAge: 60_000,
+      })
+    })
+    const lat = /** @type {GeolocationPosition} */ (pos).coords.latitude
+    const lng = /** @type {GeolocationPosition} */ (pos).coords.longitude
+
+    statusEl.textContent = 'Adresse wird ermittelt …'
+    const line = await reverseGeocodeLatLng(lat, lng)
+    addressInput.value = line
+    updateApiUrlPreview()
+    statusEl.textContent = 'Adresse übernommen. „Suchen“ zum Abfragen.'
+  } catch (err) {
+    if (typeof GeolocationPositionError !== 'undefined' && err instanceof GeolocationPositionError) {
+      setError(geoErrorMessage(err.code))
+    } else {
+      setError(formatMapsClientError(err))
+    }
+    if (statusEl) statusEl.textContent = ''
+  } finally {
+    geoBtn.disabled = false
+  }
+})
+
 updateApiUrlPreview()
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault()
-  const q = addressInput.value.trim()
   setError(null)
   renderSystemMessages([])
   if (!resultSection || !resolvedEl || !statusEl) return
-
-  if (!q) {
-    setError('Bitte eine Adresse eingeben.')
-    resultSection.classList.add('hidden')
-    statusEl.textContent = ''
-    return
-  }
 
   submitBtn.disabled = true
   statusEl.textContent = 'Suche läuft …'
   resultSection.classList.add('hidden')
 
   try {
+    const q = addressInput.value.trim()
+    if (!q) {
+      setError('Bitte eine Adresse eingeben.')
+      statusEl.textContent = ''
+      return
+    }
+
     const { resolvedLabel, stops, systemMessages } = await fetchNearbyStops(q)
-
     renderSystemMessages(systemMessages)
-
     resolvedEl.innerHTML = resolvedLabel
       ? `Treffer: <span class="text-slate-200">${escapeHtml(resolvedLabel)}</span>`
       : ''
