@@ -1,8 +1,8 @@
 import './style.css'
+import { buildServingLinesUrl, fetchServingLinesForBadges } from './api/servinglines.js'
 import { buildStopFinderUrl, fetchNearbyStops } from './api/stopfinder.js'
 import { formatMapsClientError, reverseGeocodeLatLng } from './utils/reverseGeocode.js'
 import { generateWestfalenTripDeepLink } from './utils/westfalenDeepLink.js'
-import haltestellePinSvg from './assets/haltestelle-pin.svg?raw'
 
 const root = document.querySelector('#app')
 if (!root) throw new Error('Missing #app')
@@ -22,6 +22,15 @@ root.innerHTML = `
           <p id="api-url-placeholder" class="mt-2 text-sm text-slate-400"><!-- JS --></p>
           <a
             id="api-url-link"
+            class="mt-2 hidden break-all text-sm text-violet-300 underline decoration-violet-400/50 underline-offset-2 hover:text-violet-200"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            ><!-- JS --></a>
+          <p class="mt-4 text-xs font-medium text-violet-300/90">ServingLines (erste Haltestelle, wie bei den Badges)</p>
+          <p id="serving-lines-url-placeholder" class="mt-2 text-sm text-slate-400"><!-- JS --></p>
+          <a
+            id="serving-lines-url-link"
             class="mt-2 hidden break-all text-sm text-violet-300 underline decoration-violet-400/50 underline-offset-2 hover:text-violet-200"
             href="#"
             target="_blank"
@@ -111,6 +120,8 @@ const resolvedEl = root.querySelector('#resolved')
 const stopListEl = root.querySelector('#stop-list')
 const apiUrlPlaceholder = root.querySelector('#api-url-placeholder')
 const apiUrlLink = /** @type {HTMLAnchorElement | null} */ (root.querySelector('#api-url-link'))
+const servingLinesUrlPlaceholder = root.querySelector('#serving-lines-url-placeholder')
+const servingLinesUrlLink = /** @type {HTMLAnchorElement | null} */ (root.querySelector('#serving-lines-url-link'))
 
 /**
  * Updates the preview link for the StopFinder address query.
@@ -131,6 +142,30 @@ function updateApiUrlPreview() {
     apiUrlLink.classList.remove('hidden')
     apiUrlLink.href = fullUrl
     apiUrlLink.textContent = fullUrl
+}
+
+/**
+ * Updates the debug preview for ServingLines (`XML_SERVINGLINES_REQUEST`) for one stop id.
+ * @param {string | null | undefined} stopId First stop id after search, or empty to show hint.
+ */
+function updateServingLinesUrlPreview(stopId) {
+    if (!servingLinesUrlPlaceholder || !servingLinesUrlLink) return
+    servingLinesUrlLink.classList.add('hidden')
+    servingLinesUrlLink.removeAttribute('href')
+
+    const id = typeof stopId === 'string' ? stopId.trim() : ''
+    if (!id) {
+        servingLinesUrlPlaceholder.textContent =
+            'Nach erfolgreicher Suche erscheint hier die URL für die erste Haltestelle (Linien-Badges).'
+        return
+    }
+
+    const path = buildServingLinesUrl(id)
+    const fullUrl = `${window.location.origin}${path}`
+    servingLinesUrlPlaceholder.textContent = ''
+    servingLinesUrlLink.classList.remove('hidden')
+    servingLinesUrlLink.href = fullUrl
+    servingLinesUrlLink.textContent = fullUrl
 }
 
 /**
@@ -201,22 +236,44 @@ function setGeocodeControlsDisabled(disabled) {
 const stopLinkClass =
     'text-sm font-medium underline decoration-slate-500/60 underline-offset-2 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400'
 
+/** Inline SVG (bus glyph). */
+const BUS_LINES_ICON_SVG = `<svg class="h-4 w-4 shrink-0 fill-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--!Font Awesome Free v7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2026 Fonticons, Inc.--><path d="M96 0C43 0 0 43 0 96L0 384c0 29.8 20.4 54.9 48 62l0 34c0 17.7 14.3 32 32 32l16 0c17.7 0 32-14.3 32-32l0-32 192 0 0 32c0 17.7 14.3 32 32 32l16 0c17.7 0 32-14.3 32-32l0-34c27.6-7.1 48-32.2 48-62l0-288c0-53-43-96-96-96L96 0zM64 176c0-17.7 14.3-32 32-32l104 0 0 112-104 0c-17.7 0-32-14.3-32-32l0-48zm184 80l0-112 104 0c17.7 0 32 14.3 32 32l0 48c0 17.7-14.3 32-32 32l-104 0zM96 320a32 32 0 1 1 0 64 32 32 0 1 1 0-64zm256 0a32 32 0 1 1 0 64 32 32 0 1 1 0-64zM152 72c0-13.3 10.7-24 24-24l96 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-96 0c-13.3 0-24-10.7-24-24z"/></svg>`
+
+/** Inline stop pin. */
+const HALTESTELLE_PIN_SVG = `<svg class="h-8 w-auto shrink-0 stroke-white mt-1" width="432" height="563" viewBox="0 0 432 563" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M216 30C317.79 30 400 111.082 400 210.727C400 268.191 370.845 332.939 333.903 391.454C297.219 449.562 254.088 499.63 228.6 527.333C221.75 534.771 210.71 534.887 203.729 527.682L203.4 527.333C177.912 499.63 134.781 449.562 98.0967 391.454C61.1552 332.939 32 268.191 32 210.727C32.0002 111.082 114.21 30 216 30Z" stroke="white" stroke-width="26"/>
+<path d="M127 336.454V107.392H154.721V209.396H276.784V107.392H304.505V336.454H276.784V234.003H154.721V336.454H127Z" fill="white"/>
+</svg>
+`
+
+/**
+ * Parses a trusted SVG string into a root {@link SVGSVGElement} (e.g. `innerHTML` bridge).
+ * @param {string} markup SVG document fragment with a single root `<svg>`.
+ * @returns {SVGSVGElement}
+ */
+function parseSvgMarkup(markup) {
+    const wrap = document.createElement('div')
+    wrap.innerHTML = markup.trim()
+    const el = wrap.firstElementChild
+    if (!(el instanceof SVGSVGElement)) {
+        throw new Error('Expected a root SVG element')
+    }
+    return el
+}
+
+/**
+ * Small bus icon for the “Linien” badge row (Font Awesome–style glyph).
+ * @returns {SVGSVGElement}
+ */
+function createBusLinesIcon() {
+    return parseSvgMarkup(BUS_LINES_ICON_SVG)
+}
+
 /**
  * @returns {SVGSVGElement}
  */
 function createHaltestelleIcon() {
-    const clipId = `hs-clip-${Math.random().toString(36).slice(2, 11)}`
-    const markup = haltestellePinSvg.trim().replaceAll('CLIP_ID_PLACEHOLDER', clipId)
-    const wrap = document.createElement('div')
-    wrap.innerHTML = markup
-    const svg = /** @type {SVGSVGElement} */ (wrap.firstElementChild)
-    if (!svg) throw new Error('haltestelle-pin.svg parse failed')
-    svg.setAttribute(
-        'class',
-        'h-8 w-auto shrink-0 text-white mt-1',
-    )
-    svg.setAttribute('focusable', 'false')
-    return svg
+    return parseSvgMarkup(HALTESTELLE_PIN_SVG)
 }
 
 /**
@@ -237,6 +294,56 @@ function buildGoogleMapsDirectionsUrl(stop, originText = '') {
         return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(name)}${originParam}`
     }
     return null
+}
+
+/**
+ * Renders serving line badges into a row (async).
+ * @param {HTMLDivElement} row Container for badges or status text.
+ * @param {import('./api/stopfinder.js').NearbyStop} stop Stop with optional `id`.
+ * @returns {Promise<void>}
+ */
+async function fillServingLineBadges(row, stop) {
+    if (!stop.id) {
+        const dash = document.createElement('span')
+        dash.className = 'text-xs text-slate-500'
+        dash.textContent = '—'
+        row.appendChild(dash)
+        return
+    }
+
+    const loading = document.createElement('span')
+    loading.className = 'text-xs text-slate-500'
+    loading.textContent = 'Linien werden geladen …'
+    row.appendChild(loading)
+
+    try {
+        const badges = await fetchServingLinesForBadges(stop.id)
+        row.replaceChildren()
+
+        if (badges.length === 0) {
+            const empty = document.createElement('span')
+            empty.className = 'text-xs text-slate-500'
+            empty.textContent = 'Keine Buslinien'
+            row.appendChild(empty)
+            return
+        }
+
+        for (const b of badges) {
+            const pill = document.createElement('span')
+            pill.className =
+                'inline-flex max-w-full items-center truncate rounded-md border border-slate-600/80 bg-slate-800/90 px-2 py-0.5 text-xs font-medium text-slate-200'
+            pill.textContent = b.label
+            if (b.title) pill.title = b.title
+            row.appendChild(pill)
+        }
+    } catch (err) {
+        console.error(err)
+        row.replaceChildren()
+        const errEl = document.createElement('span')
+        errEl.className = 'text-xs text-amber-400/90'
+        errEl.textContent = 'Linien konnten nicht geladen werden.'
+        row.appendChild(errEl)
+    }
 }
 
 /**
@@ -271,8 +378,30 @@ function renderStops(stops, originAddress = '') {
         if (stop.durationMin !== undefined) parts.push(`ca. ${stop.durationMin} Min.`)
         meta.textContent = parts.join(' · ') || '—'
 
+        const lineHeadingId = `stop-lines-title-${Math.random().toString(36).slice(2, 11)}`
+
+        const linesSection = document.createElement('div')
+        linesSection.className = 'mt-4'
+
+        const linesTitle = document.createElement('p')
+        linesTitle.id = lineHeadingId
+        linesTitle.className = 'text-xs font-medium tracking-wide text-slate-400 mb-1'
+        linesTitle.textContent = 'Linien'
+
+        const linesRow = document.createElement('div')
+        linesRow.className = 'mt-1 flex items-center gap-2'
+        linesRow.setAttribute('role', 'group')
+        linesRow.setAttribute('aria-labelledby', lineHeadingId)
+
+        const badgeRow = document.createElement('div')
+        badgeRow.className = 'flex min-w-0 flex-1 flex-wrap gap-1.5'
+
+        linesRow.append(createBusLinesIcon(), badgeRow)
+        linesSection.append(linesTitle, linesRow)
+        void fillServingLineBadges(badgeRow, stop)
+
         const actions = document.createElement('div')
-        actions.className = 'mt-3 flex flex-wrap items-center gap-x-5 gap-y-2'
+        actions.className = 'mt-4 flex flex-wrap items-center gap-x-5 gap-y-2'
 
         if (stop.id) {
             const plan = document.createElement('a')
@@ -295,7 +424,7 @@ function renderStops(stops, originAddress = '') {
             actions.appendChild(route)
         }
 
-        body.append(title, meta)
+        body.append(title, meta, linesSection)
         if (actions.childNodes.length > 0) {
             body.appendChild(actions)
         }
@@ -389,6 +518,7 @@ testCoordsSelect.addEventListener('change', async () => {
 })
 
 updateApiUrlPreview()
+updateServingLinesUrlPreview(null)
 
 form.addEventListener('submit', async (e) => {
     e.preventDefault()
@@ -399,6 +529,7 @@ form.addEventListener('submit', async (e) => {
     submitBtn.disabled = true
     statusEl.textContent = 'Suche läuft …'
     resultSection.classList.add('hidden')
+    updateServingLinesUrlPreview(null)
 
     try {
         const q = addressInput.value.trim()
@@ -423,10 +554,18 @@ form.addEventListener('submit', async (e) => {
             statusEl.textContent = 'Keine Haltestellen gefunden.'
             renderStops([], q)
             resultSection.classList.remove('hidden')
+            if (servingLinesUrlPlaceholder && servingLinesUrlLink) {
+                servingLinesUrlPlaceholder.textContent =
+                    'Keine Haltestellen — keine ServingLines-URL.'
+                servingLinesUrlLink.classList.add('hidden')
+                servingLinesUrlLink.removeAttribute('href')
+            }
             return
         }
 
         statusEl.textContent = `${stops.length} Haltestelle${stops.length === 1 ? '' : 'n'} in der Nähe.`
+        const firstId = stops[0]?.id
+        updateServingLinesUrlPreview(firstId)
         renderStops(stops, q)
         resultSection.classList.remove('hidden')
     } catch (err) {
@@ -436,6 +575,7 @@ form.addEventListener('submit', async (e) => {
         setError(msg)
         statusEl.textContent = ''
         resultSection.classList.add('hidden')
+        updateServingLinesUrlPreview(null)
     } finally {
         submitBtn.disabled = false
     }
