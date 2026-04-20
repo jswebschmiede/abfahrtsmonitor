@@ -213,7 +213,7 @@ function createHaltestelleIcon() {
     if (!svg) throw new Error('haltestelle-pin.svg parse failed')
     svg.setAttribute(
         'class',
-        'h-11 w-auto shrink-0 text-slate-400 [aspect-ratio:384/515]',
+        'h-8 w-auto shrink-0 text-white mt-1',
     )
     svg.setAttribute('focusable', 'false')
     return svg
@@ -253,7 +253,7 @@ function renderStops(stops, originAddress = '') {
             'rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 shadow-sm shadow-black/20'
 
         const row = document.createElement('div')
-        row.className = 'flex gap-3 items-center'
+        row.className = 'flex gap-3'
         row.appendChild(createHaltestelleIcon())
 
         const body = document.createElement('div')
