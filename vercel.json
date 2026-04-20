@@ -1,0 +1,10 @@
+{
+  "rewrites": [
+    { "source": "/google-geocode", "destination": "/api/google-geocode" },
+    {
+      "source": "/efa/:path*",
+      "destination": "https://www.westfalenfahrplan.de/nwl-efa/:path*"
+    },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}

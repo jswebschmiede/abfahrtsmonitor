@@ -1,0 +1,18 @@
+<svg viewBox="0 0 384 515" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+  <g clip-path="url(#CLIP_ID_PLACEHOLDER)">
+    <path
+      d="M192 13C291.044 13 371 91.8009 371 188.6C371 244.438 342.631 307.401 306.636 364.354C270.898 420.9 228.877 469.627 204.042 496.589C197.494 503.691 186.945 503.802 180.272 496.922L179.958 496.589C155.123 469.627 113.102 420.9 77.3643 364.354C41.3687 307.401 13 244.438 13 188.6C13.0002 91.8009 92.9564 13 192 13Z"
+      stroke="currentColor"
+      stroke-width="26"
+    />
+    <path
+      d="M105 311V88H132.018V187.305H250.982V88H278V311H250.982V211.26H132.018V311H105Z"
+      fill="currentColor"
+    />
+  </g>
+  <defs>
+    <clipPath id="CLIP_ID_PLACEHOLDER">
+      <rect width="384" height="515" fill="white" />
+    </clipPath>
+  </defs>
+</svg>

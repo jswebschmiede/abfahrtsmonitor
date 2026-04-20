@@ -2,6 +2,7 @@ import './style.css'
 import { buildStopFinderUrl, fetchNearbyStops } from './api/stopfinder.js'
 import { formatMapsClientError, reverseGeocodeLatLng } from './utils/reverseGeocode.js'
 import { generateWestfalenTripDeepLink } from './utils/westfalenDeepLink.js'
+import haltestellePinSvg from './assets/haltestelle-pin.svg?raw'
 
 const root = document.querySelector('#app')
 if (!root) throw new Error('Missing #app')
@@ -62,7 +63,7 @@ root.innerHTML = `
             <button
               type="button"
               id="geo-btn"
-              class="inline-flex shrink-0 items-center justify-center border-l border-slate-700 bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-700 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-violet-400 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4 sm:text-sm"
+              class="inline-flex shrink-0 items-center justify-center border-l border-slate-700 bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-700 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4 sm:text-sm"
               title="Standort vom Gerät ermitteln"
             >
               Standort vom Gerät
@@ -89,7 +90,7 @@ root.innerHTML = `
       <div id="error" class="mt-2 hidden rounded-lg border border-red-900/80 bg-red-950/50 px-3 py-2 text-sm text-red-200" role="alert" aria-live="assertive"></div>
 
       <section id="result-section" class="mt-8 hidden" aria-labelledby="results-heading">
-        <h2 id="results-heading" class="text-lg font-medium text-white">Ergebnis</h2>
+        <h2 id="results-heading" class="text-lg font-medium text-white">In der Nähe befinden sich folgende Haltestellen:</h2>
         <p id="resolved" class="mt-1 text-sm text-slate-400"></p>
         <ul id="stop-list" class="mt-4 flex list-none flex-col gap-3 p-0"></ul>
       </section>
@@ -201,6 +202,24 @@ const stopLinkClass =
     'text-sm font-medium underline decoration-slate-500/60 underline-offset-2 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400'
 
 /**
+ * @returns {SVGSVGElement}
+ */
+function createHaltestelleIcon() {
+    const clipId = `hs-clip-${Math.random().toString(36).slice(2, 11)}`
+    const markup = haltestellePinSvg.trim().replaceAll('CLIP_ID_PLACEHOLDER', clipId)
+    const wrap = document.createElement('div')
+    wrap.innerHTML = markup
+    const svg = /** @type {SVGSVGElement} */ (wrap.firstElementChild)
+    if (!svg) throw new Error('haltestelle-pin.svg parse failed')
+    svg.setAttribute(
+        'class',
+        'h-11 w-auto shrink-0 text-slate-400 [aspect-ratio:384/515]',
+    )
+    svg.setAttribute('focusable', 'false')
+    return svg
+}
+
+/**
  * Builds a Google Maps directions URL (optional origin = user address, destination = stop).
  * @param {import('./api/stopfinder.js').NearbyStop} stop Normalized stop.
  * @param {string} [originText=''] - Start address as entered in the search field.
@@ -232,6 +251,13 @@ function renderStops(stops, originAddress = '') {
         const li = document.createElement('li')
         li.className =
             'rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 shadow-sm shadow-black/20'
+
+        const row = document.createElement('div')
+        row.className = 'flex gap-3 items-center'
+        row.appendChild(createHaltestelleIcon())
+
+        const body = document.createElement('div')
+        body.className = 'min-w-0 flex-1'
 
         const label = stop.name || '(ohne Namen)'
         const title = document.createElement('p')
@@ -269,10 +295,12 @@ function renderStops(stops, originAddress = '') {
             actions.appendChild(route)
         }
 
-        li.append(title, meta)
+        body.append(title, meta)
         if (actions.childNodes.length > 0) {
-            li.appendChild(actions)
+            body.appendChild(actions)
         }
+        row.appendChild(body)
+        li.appendChild(row)
         stopListEl.appendChild(li)
     }
 }
@@ -390,10 +418,6 @@ form.addEventListener('submit', async (e) => {
             statusEl.textContent = ''
             return
         }
-
-        resolvedEl.innerHTML = resolvedLabel
-            ? `Treffer: <span class="text-slate-200">${escapeHtml(resolvedLabel)}</span>`
-            : ''
 
         if (stops.length === 0) {
             statusEl.textContent = 'Keine Haltestellen gefunden.'
